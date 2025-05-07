@@ -1,0 +1,6 @@
+{
+    "resnet50": { "model_size_mb": 98, "latency_ms": 150, "ram_usage_mb": 1200 },
+    "mobilenet_v2": { "model_size_mb": 14, "latency_ms": 45,  "ram_usage_mb": 512 },
+    "inception_v3": { "model_size_mb": 104, "latency_ms": 400,  "ram_usage_mb": 700 }
+
+}

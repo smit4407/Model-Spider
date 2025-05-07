@@ -1,0 +1,7 @@
+{
+  "raspberry_pi_4": {
+    "max_ram_mb": 2048,
+    "max_model_size_mb": 50,
+    "max_latency_ms": 100
+  }
+}

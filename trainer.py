@@ -4,6 +4,7 @@ import random
 
 import logging
 import hashlib
+import json
 import datetime
 from copy import deepcopy
 from pathlib import Path
@@ -59,9 +60,30 @@ class Trainer(object):
         parser.add_argument('--heterogeneous_sampled_maxnum', type=int, default=10)
         parser.add_argument('--heterogeneous_prompt', action='store_true', default=False)
         parser.add_argument('--heterogeneous_extra_prompt', action='store_true', default=False)
-        return parser
 
+        parser.add_argument(
+            "--hardware_profile", type=str,
+            help="Key of hardware_profiles.json, e.g. raspberry_pi_4"
+        )
+        parser.add_argument(
+            "--hardware_profiles_path", type=str, default="hardware_profiles.json",
+            help="Path to hardware profiles file"
+        )
+        parser.add_argument(
+            "--model_footprints_path", type=str, default="model_footprints.json",
+            help="Path to precomputed model footprints"
+        )
+        return parser
     def __init__(self, args):
+
+        #added hardware paths
+        if args.hardware_profile:
+            with open(args.hardware_profiles_path) as f:
+                self.hw_profile = json.load(f)[args.hardware_profile]
+            with open(args.model_footprints_path) as f:
+                self.model_footprints = json.load(f)
+        else:
+            self.hw_profile, self.model_footprints = None, None
         if args.time_str == '':
             args.time_str = datetime.datetime.now().strftime('%m%d-%H-%M-%S-%f')[:-3]
 
@@ -298,9 +320,33 @@ class Trainer(object):
             prompt2hete[i_prompt] = torch.stack(prompt2hete[i_prompt])
 
         return x_uni, prompt2hete, prompt_id2hete_pad_length, cur_batch_heterogeneous_sampled_num
+    
+
+    def will_fit(self, model_name):
+        """
+        Returns True if model_name fits the hardware constraints.
+        """
+        if not self.hw_profile:
+            return True   # no filtering
+
+        fp = self.model_footprints.get(model_name, {})
+        # Simple if-statements to filter
+        if fp.get("model_size_mb", float("inf")) > self.hw_profile["max_model_size_mb"]:
+            return False
+        if fp.get("ram_usage_mb", float("inf")) > self.hw_profile["max_ram_mb"]:
+            return False
+        if fp.get("latency_ms", float("inf")) > self.hw_profile["max_latency_ms"]:
+            return False
+        return True
 
     def fit(self):
         if not self.do_train:
+
+            for model_name in self.model_list:
+                if not self.will_fit(model_name):
+                    logging.info(f"Skipping {model_name}; exceeds hardware limits.")
+                    continue
+                self.load_model(model_name)
             epoch = 0
             # Test for k=0
             LearnwareDataset.__heterogeneous_sampled_fixnum__ = 0
@@ -417,6 +463,7 @@ class Trainer(object):
 
         with open('./results.csv', 'a') as f:
             f.write(content)
+
 
     def test(self, epoch, control_saved=[]):
         stype = 'test'
